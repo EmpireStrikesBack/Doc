@@ -11,6 +11,7 @@ Goroutines : subroutine functions that can't be interrupted
 - Go follows a model of concurrency called "fork-join model" :
     -> "fork" : at any point in the program it can split off a branch if execution to be run concurrently whith its parent. 
     -> "join" : at some point in the future the conccurent branhces of execution we'll join back together a the "joint point".
+
     ![alt text](image.png)
 
 
@@ -31,6 +32,7 @@ We can write go routines different ways :
 ```
 
 or by using an anonymous function :
+
 ```go
     func main(){
         go func(){
@@ -41,6 +43,7 @@ or by using an anonymous function :
 ```
 
 or we can assign the function to a variable and call the anonymous function this way :
+
 ```go
     sayHello := func(){
         fmt.println("Hello")
@@ -60,6 +63,7 @@ Here, there's no joint point so the SayHello goroutine'll simply exit at some po
 ### Creating a join point
 
 We need to synchronize the main and the SayHello goroutines : "synch.WaitGroup"
+
 ```go
     var wg synch.WaitGroup
     SayHello := func (){
@@ -74,6 +78,7 @@ We need to synchronize the main and the SayHello goroutines : "synch.WaitGroup"
 
 Closures close around the lexical scope they're created in (capturing variables)
 - If we run a closure in a goroutine does the closure operate on a copy of these variables ? or the original reference ?
+
 ```go
     var wg synch.WaitGroup
     salutation := "hello"
@@ -101,7 +106,7 @@ Closures close around the lexical scope they're created in (capturing variables)
     -> Before the 22 version Go update the result was :
     ![alt text](image-1.png)
         -> Each iteration of the loop used the same variable which was updated in each iteration.
-        -> This led to unexpected behavior in goroutines : they might all end up referring to the final value of the loope variable.
+        -> This led to unexpected behavior in goroutines : they might all end up referring to the final value of the loop variable.
     -> After the update the result is :
     ![alt text](image-2.png)
         -> Each iteration of a for loop that declares variables uses a new variable for each iteration.
@@ -121,7 +126,7 @@ Closures close around the lexical scope they're created in (capturing variables)
             -> It makes the intent clear and ensures cimpatibility with older Go versions
 
 ```go
-                for _, salutaiton := range []string {"Hello", "Greetings", "Good day"}{
+                for _, salutation := range []string {"Hello", "Greetings", "Good day"}{
                     go func(s string){
                         fmt.Println(s)
                     }(salutation)
@@ -137,6 +142,7 @@ Go compiler takes care of pinning variables in memory so that the goroutines don
 Another benefit of goroutines : extraordinary lightweight (a few Kb/goroutine).
 
 Goroutines are not garbage collected with the runtime"s ability to introspect upon itself and measure the amount of memory allocated before and after goroutine creation :
+
 ```go
 func main(){
     memConsumed := func() unint64{
@@ -180,6 +186,7 @@ WaitGroup is a great way to wait for a set of conccurent operations to complete 
     -> If not : We'd better use Channels and select a statement.
 
 Basic example of using WaitGroup to wait for goroutines to complete :
+
 ```go
     func main(){
         var wg sync.WaitGroup 
@@ -205,7 +212,9 @@ Basic example of using WaitGroup to wait for goroutines to complete :
 - We call Done using the defer keyword to ensure that before we exit the goroutine's closure we indicate to the WaitGroup that we've exited.
 - We call Wait which blocks the main goroutine until all goroutines have indicated they have exited. 
 - We get this result :
+
 ![alt text](image-3.png)
+
 - Go'll send you 2 error messages saying that sleeping for 1 nanoseconds is probably a bug because most operating systems don't provide precise timing down to the nanosecond level (the typical time is in the range of microseconds or milliseconds).
     -> 1 nanosecond sleep'll almost expire immediatly and may not give the goroutine scheduler enough time to switch contexts.
 
@@ -231,7 +240,144 @@ func main(){
 }
 ```
 - We'll get this result :
+
 ![alt text](image-4.png)
+
 - But if we run it several times we won't get the same order because it's the principle of concurrency :
 -> Go's runtime scheduler decides when to execute each goroutine based on factors like CPU availability, the state of the other goroutines and the internal scheduling algorithm.
 -> There's no garuantee that the goroutines'll execute in the order they were created.
+
+
+
+### Mutex & RWMutex
+
+
+#### Mutex
+
+Mutex : Mutual Exclusion, it's a way to guard critical sections of our program (areas that require exclusive acces to a sharde resource).
+- Provides a conccurent-safe way to express exclusive acces to these sharred resources.
+- Shares memory by creating a convention developers have to follow to synchronyze access to the memory.
+- We're responsible for coordinationg access to this memory by guarding access to it with a Mutex.
+
+Example of 2 goroutines attempting to increment & decrement a common value, they use Mutex to synchronize access :
+
+```go
+    func main(){
+        var count int 
+        var lock sync.Mutex
+
+        increment := func(){
+            lock.Lock()
+            defer lock.Unlock()
+            count ++
+            fmt.Printf("Incrementing: %d\n", count)
+        }
+
+        decrement := func(){
+            lock.Lock()
+            defer lock.Unlock()
+            count --
+            fmt.Printf("Decrementing: %d\n", count)
+        }
+
+        var arithmectic sync.WaitGroup
+        for i := 0; i <= 5; i ++{
+            arithmetic.Add(1)
+            go func(){
+                defer arithmetic.Done()
+                increment()
+            }()
+        }
+
+        for i := 0; i <= 5; i --{
+            arithmetic.Add(1)
+            go func(){
+                defer arithmetic.Done()
+                decrement()
+            }()
+        }
+        arithmetic.Wait()
+        fmt.Println("Arithmetic complete.")
+    }
+```
+
+we could refactor the for loop :
+
+``` go
+    func main(){
+        var count int
+        var lock sync.Mutex
+        var arithmetic sync.WaitGroup
+
+        increment := func(){
+            lock.Lock()
+            defer lock.Unlock()
+            count++
+            fmt.Printf("Incrementing: %d\n", count)
+        }
+
+        decrement := func(){
+            lock.Lock()
+            defer lock.Unlock()
+            count --
+            fmt.Printf("Decrementing: %d\n", count)
+        }
+
+        for i := 0; i <= 5; i ++{
+            arithmetic.Add(1)
+            go func(){
+                defer arithmetic.Done()
+                increment()
+            }()
+            arithmetic.Add(1)
+            go func(){
+                defer arithmetic.Done()
+                decrement()
+            }()
+        }
+        arithmetic.Wait()
+        fmt.Println("Arithmetic complete.")
+    }
+```
+- We request exclusive use of the critical section (the count variable) guarded by a Mutex lock : lock.Lock()
+- We indicate that we're done with the critical section lock is guarding : defer lock.Unlock()
+    -> We always call Unlock whithin the defer statement : ensures that the call always happen even when panicking.
+    -> Failing to do so would probably cause our program to deadlock.
+    -> Deadlock : when >= 2 processes are each waiting for the other to release resources or perform actions, causing all of them to remain blocked indefinitly. 
+- We get this kind of result (because it varies each time we run the program) :
+
+![alt text](image-5.png)
+
+
+#### RWMutex 
+
+RWMutex : conceptually the same thing as Mutex, guards access to memory but gives us a little bit more control over the memory.
+We can request a lock for reading : we'll be granted access unless the lock is beeing held for writing.
+- An arbitrary number of readers can hold a reader lock so long as nothing else is holding a writer lock.
+
+Example showing that a producer is less active than the numerous consumers the code creates :
+
+```go
+    func main(){
+        var wg synch.WaitGroup
+        
+        producer := func(wg *synch.WaitGroup, l sync.Locker){
+            defer wg.done()
+            for i:= 5; i > 0; i --{
+                l.Lock()
+                l.Unlock()
+                time.Sleep(1)
+            }
+        }
+
+        observer := func(wg *sync.WaitGroup, l sync.Locker){
+            defer wg.Done()
+            l.Lock()
+            defer l.Unlock()
+        }
+
+        test := func(count int, mutex, rwmMutex sync.Locker) time.Duration{
+            
+        }
+    }
+```
