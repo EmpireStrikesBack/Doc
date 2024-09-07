@@ -143,4 +143,62 @@ func main() {
 			test(count, &m, &m),
 		)
 	}
+
+	a := sync.NewCond(&sync.Mutex{})
+	queue := make([]interface{}, 0, 10)
+
+	removeFromQueue := func(delay time.Duration) {
+		time.Sleep(delay)
+		a.L.Lock()
+		queue = queue[1:]
+		fmt.Println("Removed from queue")
+		a.L.Unlock()
+		a.Signal()
+	}
+
+	for i := 0; i < 10; i++ {
+		a.L.Lock()
+		for len(queue) == 2 {
+			a.Wait()
+		}
+		fmt.Println("Adding to queue")
+		queue = append(queue, struct{}{})
+		go removeFromQueue(1 * time.Second)
+		a.L.Unlock()
+	}
+
+	type Button struct {
+		Clicked *sync.Cond
+	}
+	button := Button{Clicked: sync.NewCond(&sync.Mutex{})}
+
+	var goroutineRunning sync.WaitGroup
+	subscribe := func(d *sync.Cond, fn func()) {
+		goroutineRunning.Add(1)
+		go func() {
+			goroutineRunning.Done()
+			d.L.Lock()
+			defer d.L.Unlock()
+			d.Wait()
+			fn()
+		}()
+		goroutineRunning.Wait()
+	}
+
+	var clickRegistered sync.WaitGroup
+	clickRegistered.Add(3)
+	subscribe(button.Clicked, func() {
+		fmt.Println("Maximizing window.")
+		clickRegistered.Done()
+	})
+	subscribe(button.Clicked, func() {
+		fmt.Println("Displaying annoying dialog box!")
+		clickRegistered.Done()
+	})
+	subscribe(button.Clicked, func() {
+		fmt.Println("Mouse cliked.")
+		clickRegistered.Done()
+	})
+	button.Clicked.Broadcast()
+	clickRegistered.Wait()
 }
