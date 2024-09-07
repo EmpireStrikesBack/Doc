@@ -133,4 +133,105 @@ Go compiler takes care of pinning variables in memory so that the goroutines don
 - Since multiple goroutines can operate against the same address space we still need to worry about synchronization.
     -> Synchronize access to the shared memory the goroutines access.
     -> Use CSP primitives (Communicating Sequencial Processes) to share memory by communication.
-        -> Formal language for describing patterns of interaction in concurrent systems : components communicate with each other only through message passing whithout sharing memomry.
+        -> Formal language for describing patterns of interaction in concurrent systems : components communicate with each other only through message passing whithout sharing memory.
+Another benefit of goroutines : extraordinary lightweight (a few Kb/goroutine).
+
+Goroutines are not garbage collected with the runtime"s ability to introspect upon itself and measure the amount of memory allocated before and after goroutine creation :
+```go
+func main(){
+    memConsumed := func() unint64{
+        runtime.GC()
+        var s runtime.Memstats
+        runtime.ReadMemStats(&s)
+        return s.Sys
+    }
+
+    var c <-chan interface{}
+    var wg synch.WaitGroup
+    noop := func() {wg.Done(); <-c}
+
+    cins numGoroutines = 1e4
+    wg.Add(numGoroutines)
+    before := memConsumed()
+    for i := numGoroutines; i > 0; i --{
+        go noop()
+    }
+    wg.Wait()
+    after := memConsumed()
+    fmt.Printf("%.3fkb", float64(after-before)/numGoroutines/1000)
+}
+```
+- We require goroutines that'll never exit so we can keep them in memory for measurement.
+- We define the number of goroutines to create (1e4 = 10 000).
+- We measure the amount of memory consumed before and after creating our goroutines.
+- The result we get is arround 2.600kb
+
+
+
+## Sync package 
+
+Contains the concurrency primitives that are most useful for lowlevel memory access synchronization.
+
+### WaitGroup
+
+WaitGroup is a great way to wait for a set of conccurent operations to complete when :
+- We don't care about the result of the concurrent operations.
+- We have other means to collect their result. 
+    -> If not : We'd better use Channels and select a statement.
+
+Basic example of using WaitGroup to wait for goroutines to complete :
+```go
+    func main(){
+        var wg sync.WaitGroup 
+
+        wg.Add(1)
+        go func(){
+            defer wg.Done()
+            fmt.Println("1st goroutine sleeping...")
+            time.Sleep(1)
+        }()
+
+        wg.Add(1)
+        go func() {
+            defer wg.Done()
+            fmt.Prinln("2cd goroutine sleeping...")
+            time.Sleep(2)
+        }()
+        wg.wait()
+        fmt.Println("All goroutines complete.")
+    }
+```
+- We call Add with an argument of 1 to indicate that one goroutine is beginning.
+- We call Done using the defer keyword to ensure that before we exit the goroutine's closure we indicate to the WaitGroup that we've exited.
+- We call Wait which blocks the main goroutine until all goroutines have indicated they have exited. 
+- We get this result :
+![alt text](image-3.png)
+- Go'll send you 2 error messages saying that sleeping for 1 nanoseconds is probably a bug because most operating systems don't provide precise timing down to the nanosecond level (the typical time is in the range of microseconds or milliseconds).
+    -> 1 nanosecond sleep'll almost expire immediatly and may not give the goroutine scheduler enough time to switch contexts.
+
+We can think of WaitGroup like a concurrent-safe counter : 
+-> Calls to Add to increment the counter by the integer passed in.
+-> Calls Done to decrement the counter by 1.
+-> Calls Wait to block until the counter attains 0.
+
+It's customary to couple calls to Add as closely as possible to the goroutines they're helping to track but sometimes we'll find Add called to track a group of goroutines all at once:
+
+```go
+func main(){
+    hello := func(wg *sync.WaitGroup, id int) {
+	    defer wg.Done()
+	    fmt.Printf("Hello from %v\n", id)
+    }
+	const numGreeeters = 5
+	wg.Add(numGreeeters)
+	for i := 0; i < numGreeeters; i++ {
+		go hello(&wg, i+1)
+	}
+	wg.Wait()
+}
+```
+- We'll get this result :
+![alt text](image-4.png)
+- But if we run it several times we won't get the same order because it's the principle of concurrency :
+-> Go's runtime scheduler decides when to execute each goroutine based on factors like CPU availability, the state of the other goroutines and the internal scheduling algorithm.
+-> There's no garuantee that the goroutines'll execute in the order they were created.
