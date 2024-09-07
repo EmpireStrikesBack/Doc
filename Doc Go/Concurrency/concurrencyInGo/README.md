@@ -359,10 +359,10 @@ Example showing that a producer is less active than the numerous consumers the c
 
 ```go
     func main(){
-        var wg synch.WaitGroup
-        
-        producer := func(wg *synch.WaitGroup, l sync.Locker){
-            defer wg.done()
+        var wg sync.WaitGroup
+
+        producer := func(wg *sync.WaitGroup, l sync.Locker){
+            defer wg.Done()
             for i:= 5; i > 0; i --{
                 l.Lock()
                 l.Unlock()
@@ -376,8 +376,41 @@ Example showing that a producer is less active than the numerous consumers the c
             defer l.Unlock()
         }
 
-        test := func(count int, mutex, rwmMutex sync.Locker) time.Duration{
-            
+        test := func(count int, mutex, rwMutex sync.Locker) time.Duration{
+            wg.Add(count+1)
+            beginTestTime := time.Now()
+            go producer(&wg, Mutex)
+            for i := count; i > 0; i --{
+                go observer(&wg, rwMutex)
+            } 
+            wg.Wait()
+            return time.Since(beginTestTime)
+        }
+        
+        tw := tabwriter.NewWriter(os.Stdout, 0, 1, 2, ' ', 0)
+        defer tw.Flush()
+
+        var m sync.RWMutex 
+        fmt.Fprintf(tw, "Readers\tRWMutex\tMutex\n")
+        for i := 0; i < 20; i++{
+            count := int(math.Pow(2, float64(i)))
+            fmt.Fprintf(
+                tw,
+                "%d\t%v\t%v\n",
+                count,
+                test(count, &m, m.RLocker()),
+                test(count, &m, &m),
+            )
         }
     }
 ```
+
+- The producer function's 2cd parameter is of the type sync.Locker: has 2 methods (Lock and Unlock) that Mutex & RWMutex satisfy.
+- We make the producer sleep for 1 nanosecond to make it less active than the observers goroutines.
+- We get this result :
+
+![alt text](image-6.png)
+
+- What we need to remember is that :
+    -> RWMutex provides better performances read-heavy scenarios : allows multiple readers to acces the shared resource simultaneously, reducing contention.
+    -> Mutex is simpler and slightly faster in low-contention cases.
