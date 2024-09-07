@@ -120,13 +120,13 @@ Closures close around the lexical scope they're created in (capturing variables)
             -> While this change makes many concurrent patterns in Go safer and more intuitive it's still considered to explicitly pass loop variables to goroutines
             -> It makes the intent clear and ensures cimpatibility with older Go versions
 
-            ```go
+```go
                 for _, salutaiton := range []string {"Hello", "Greetings", "Good day"}{
                     go func(s string){
                         fmt.Println(s)
                     }(salutation)
                 }
-            ``` 
+ ``` 
 Because goroutines operate whithin the same address space as each other and just host functions : utilizing them is a natural extension to writing non-concurrent code.
 Go compiler takes care of pinning variables in memory so that the goroutines don't accidently access freed memory :
 - Allows developers to focus on their space problems instead of memory managment. 
