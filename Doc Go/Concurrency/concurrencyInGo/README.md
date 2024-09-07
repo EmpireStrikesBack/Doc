@@ -74,6 +74,7 @@ We need to synchronize the main and the SayHello goroutines : "synch.WaitGroup"
     go SayHello()
     wg.Wait() //this is the join point 
 ```
+
     - The gorouitne is blocked until the goroutine hosting SayHello() terminates.
 
 Closures close around the lexical scope they're created in (capturing variables)
@@ -90,6 +91,7 @@ Closures close around the lexical scope they're created in (capturing variables)
     wg.Wait()
     fmt.Println(salutation)
 ```
+
     - Goroutines execute within the same address space they were created in so our program prints "Welcome".
 
 ```go
@@ -103,6 +105,7 @@ Closures close around the lexical scope they're created in (capturing variables)
     }
     wg.Wait()
 ```
+
     - Before the 22 version Go update the result was :
     ![alt text](image-1.png)
         - Each iteration of the loop used the same variable which was updated in each iteration.
@@ -121,9 +124,10 @@ Closures close around the lexical scope they're created in (capturing variables)
             }
 ```
 
-            -> Now each goroutine captures a different "salutation" value corresponding to the iteration in which it was launched.
-            -> While this change makes many concurrent patterns in Go safer and more intuitive it's still considered to explicitly pass loop variables to goroutines
-            -> It makes the intent clear and ensures cimpatibility with older Go versions
+            - Now each goroutine captures a different "salutation" value corresponding to the iteration in which it was launched.
+            - While this change makes many concurrent patterns in Go safer and more intuitive it's still considered to explicitly pass loop variables to goroutines
+            - It makes the intent clear and ensures cimpatibility with older Go versions
+
 
 ```go
                 for _, salutation := range []string {"Hello", "Greetings", "Good day"}{
@@ -132,6 +136,7 @@ Closures close around the lexical scope they're created in (capturing variables)
                     }(salutation)
                 }
  ``` 
+ 
 Because goroutines operate whithin the same address space as each other and just host functions : utilizing them is a natural extension to writing non-concurrent code.
 Go compiler takes care of pinning variables in memory so that the goroutines don't accidently access freed memory :
 - Allows developers to focus on their space problems instead of memory managment. 
@@ -167,6 +172,7 @@ func main(){
     fmt.Printf("%.3fkb", float64(after-before)/numGoroutines/1000)
 }
 ```
+
 - We require goroutines that'll never exit so we can keep them in memory for measurement.
 - We define the number of goroutines to create (1e4 = 10 000).
 - We measure the amount of memory consumed before and after creating our goroutines.
@@ -208,6 +214,7 @@ Basic example of using WaitGroup to wait for goroutines to complete :
         fmt.Println("All goroutines complete.")
     }
 ```
+
 - We call Add with an argument of 1 to indicate that one goroutine is beginning.
 - We call Done using the defer keyword to ensure that before we exit the goroutine's closure we indicate to the WaitGroup that we've exited.
 - We call Wait which blocks the main goroutine until all goroutines have indicated they have exited. 
