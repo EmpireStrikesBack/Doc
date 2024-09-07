@@ -528,7 +528,7 @@ We have a queue of fixed length 2 & 10 items we want to push onto the queue
     - We could do the same thing with Signal with channels but Broadcast is way more efficient.
 
 
-    #### Broadcast 
+#### Broadcast 
 
     Lets imagine we're creating a GUI application with a button on it, we want to register an arbitrary number of functions that'll run when that button is clicked on. Con is perfect for it because we can use its Broadcast method to notify all registered handlers :
 
