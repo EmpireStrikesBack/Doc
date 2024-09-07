@@ -9,8 +9,8 @@ Goroutines : subroutine functions that can't be interrupted
 - They have multiple points for supsension/re-entry.
 - Go runtime observes their runtime behavior and automatically suspends them when they block and then resumes them when they become unblocked.
 - Go follows a model of concurrency called "fork-join model" :
-    -> "fork" : at any point in the program it can split off a branch if execution to be run concurrently whith its parent. 
-    -> "join" : at some point in the future the conccurent branhces of execution we'll join back together a the "joint point".
+    - "fork" : at any point in the program it can split off a branch if execution to be run concurrently whith its parent. 
+    - "join" : at some point in the future the conccurent branhces of execution we'll join back together a the "joint point".
 
     ![alt text](image.png)
 
@@ -74,7 +74,7 @@ We need to synchronize the main and the SayHello goroutines : "synch.WaitGroup"
     go SayHello()
     wg.Wait() //this is the join point 
 ```
-    -> The gorouitne is blocked until the goroutine hosting SayHello() terminates.
+    - The gorouitne is blocked until the goroutine hosting SayHello() terminates.
 
 Closures close around the lexical scope they're created in (capturing variables)
 - If we run a closure in a goroutine does the closure operate on a copy of these variables ? or the original reference ?
@@ -90,7 +90,7 @@ Closures close around the lexical scope they're created in (capturing variables)
     wg.Wait()
     fmt.Println(salutation)
 ```
-    -> Goroutines execute within the same address space they were created in so our program prints "Welcome".
+    - Goroutines execute within the same address space they were created in so our program prints "Welcome".
 
 ```go
     var wg synch.WaitGroup
@@ -103,15 +103,15 @@ Closures close around the lexical scope they're created in (capturing variables)
     }
     wg.Wait()
 ```
-    -> Before the 22 version Go update the result was :
+    - Before the 22 version Go update the result was :
     ![alt text](image-1.png)
-        -> Each iteration of the loop used the same variable which was updated in each iteration.
-        -> This led to unexpected behavior in goroutines : they might all end up referring to the final value of the loop variable.
-    -> After the update the result is :
+        - Each iteration of the loop used the same variable which was updated in each iteration.
+        - This led to unexpected behavior in goroutines : they might all end up referring to the final value of the loop variable.
+    - After the update the result is :
     ![alt text](image-2.png)
-        -> Each iteration of a for loop that declares variables uses a new variable for each iteration.
-        -> This new behavior applies to "for", "for range" and "if" statement assignment loops.
-        -> This change makes the following code behave as most developers would intuitively expect:
+        - Each iteration of a for loop that declares variables uses a new variable for each iteration.
+        - This new behavior applies to "for", "for range" and "if" statement assignment loops.
+        - This change makes the following code behave as most developers would intuitively expect:
         
 ```go
             for _, salutation := range []string{"Hello", "Greetings", "Good day"}{
@@ -136,9 +136,9 @@ Because goroutines operate whithin the same address space as each other and just
 Go compiler takes care of pinning variables in memory so that the goroutines don't accidently access freed memory :
 - Allows developers to focus on their space problems instead of memory managment. 
 - Since multiple goroutines can operate against the same address space we still need to worry about synchronization.
-    -> Synchronize access to the shared memory the goroutines access.
-    -> Use CSP primitives (Communicating Sequencial Processes) to share memory by communication.
-        -> Formal language for describing patterns of interaction in concurrent systems : components communicate with each other only through message passing whithout sharing memory.
+    - Synchronize access to the shared memory the goroutines access.
+    - Use CSP primitives (Communicating Sequencial Processes) to share memory by communication.
+        - Formal language for describing patterns of interaction in concurrent systems : components communicate with each other only through message passing whithout sharing memory.
 Another benefit of goroutines : extraordinary lightweight (a few Kb/goroutine).
 
 Goroutines are not garbage collected with the runtime"s ability to introspect upon itself and measure the amount of memory allocated before and after goroutine creation :
@@ -183,7 +183,7 @@ Contains the concurrency primitives that are most useful for lowlevel memory acc
 WaitGroup is a great way to wait for a set of conccurent operations to complete when :
 - We don't care about the result of the concurrent operations.
 - We have other means to collect their result. 
-    -> If not : We'd better use Channels and select a statement.
+    - If not : We'd better use Channels and select a statement.
 
 Basic example of using WaitGroup to wait for goroutines to complete :
 
@@ -216,12 +216,12 @@ Basic example of using WaitGroup to wait for goroutines to complete :
 ![alt text](image-3.png)
 
 - Go'll send you 2 error messages saying that sleeping for 1 nanoseconds is probably a bug because most operating systems don't provide precise timing down to the nanosecond level (the typical time is in the range of microseconds or milliseconds).
-    -> 1 nanosecond sleep'll almost expire immediatly and may not give the goroutine scheduler enough time to switch contexts.
+    - 1 nanosecond sleep'll almost expire immediatly and may not give the goroutine scheduler enough time to switch contexts.
 
 We can think of WaitGroup like a concurrent-safe counter : 
--> Calls to Add to increment the counter by the integer passed in.
--> Calls Done to decrement the counter by 1.
--> Calls Wait to block until the counter attains 0.
+- Calls to Add to increment the counter by the integer passed in.
+- Calls Done to decrement the counter by 1.
+- Calls Wait to block until the counter attains 0.
 
 It's customary to couple calls to Add as closely as possible to the goroutines they're helping to track but sometimes we'll find Add called to track a group of goroutines all at once:
 
@@ -244,8 +244,8 @@ func main(){
 ![alt text](image-4.png)
 
 - But if we run it several times we won't get the same order because it's the principle of concurrency :
--> Go's runtime scheduler decides when to execute each goroutine based on factors like CPU availability, the state of the other goroutines and the internal scheduling algorithm.
--> There's no garuantee that the goroutines'll execute in the order they were created.
+- Go's runtime scheduler decides when to execute each goroutine based on factors like CPU availability, the state of the other goroutines and the internal scheduling algorithm.
+- There's no garuantee that the goroutines'll execute in the order they were created.
 
 
 
@@ -341,9 +341,9 @@ we could refactor the for loop :
 ```
 - We request exclusive use of the critical section (the count variable) guarded by a Mutex lock : lock.Lock()
 - We indicate that we're done with the critical section lock is guarding : defer lock.Unlock()
-    -> We always call Unlock whithin the defer statement : ensures that the call always happen even when panicking.
-    -> Failing to do so would probably cause our program to deadlock.
-    -> Deadlock : when >= 2 processes are each waiting for the other to release resources or perform actions, causing all of them to remain blocked indefinitly. 
+    - We always call Unlock whithin the defer statement : ensures that the call always happen even when panicking.
+    - Failing to do so would probably cause our program to deadlock.
+    - Deadlock : when >= 2 processes are each waiting for the other to release resources or perform actions, causing all of them to remain blocked indefinitly. 
 - We get this kind of result (because it varies each time we run the program) :
 
 ![alt text](image-5.png)
@@ -412,5 +412,5 @@ Example showing that a producer is less active than the numerous consumers the c
 ![alt text](image-6.png)
 
 - What we need to remember is that :
-    -> RWMutex provides better performances read-heavy scenarios : allows multiple readers to acces the shared resource simultaneously, reducing contention.
-    -> Mutex is simpler and slightly faster in low-contention cases.
+    - RWMutex provides better performances read-heavy scenarios : allows multiple readers to acces the shared resource simultaneously, reducing contention.
+    - Mutex is simpler and slightly faster in low-contention cases.
