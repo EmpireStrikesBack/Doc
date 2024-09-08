@@ -13,7 +13,7 @@ import (
 var wg sync.WaitGroup
 
 func main() {
-
+	// Creating a join point
 	for _, salutation := range []string{"hello", "greetings", "good day"} {
 		wg.Add(1)
 		go func() {
@@ -30,6 +30,7 @@ func main() {
 		return s.Sys
 	}
 
+	// Measuring the amount of memory allocated before-after goroutine creation
 	var c <-chan interface{}
 	noop := func() { wg.Done(); <-c }
 
@@ -43,6 +44,7 @@ func main() {
 	after := memConsumed()
 	fmt.Printf("%.3fkb\n", float64(after-before)/numGoroutines/1000)
 
+	// WaitGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -59,6 +61,7 @@ func main() {
 	wg.Wait()
 	fmt.Println("all goroutines complete.")
 
+	// Couple calls to Add as closely as possible to the goroutines
 	hello := func(wg *sync.WaitGroup, id int) {
 		defer wg.Done()
 		fmt.Printf("Hello from %v\n", id)
@@ -70,6 +73,7 @@ func main() {
 	}
 	wg.Wait()
 
+	// Mutex : 2 goroutines attempting to increment & decrement a common value
 	var count int
 	var lock sync.Mutex
 	var arithmetic sync.WaitGroup
@@ -103,6 +107,7 @@ func main() {
 	arithmetic.Wait()
 	fmt.Println("Arithmetic complete.")
 
+	// WRMutex
 	producer := func(wg *sync.WaitGroup, l sync.Locker) {
 		defer wg.Done()
 		for i := 5; i > 0; i-- {
@@ -144,6 +149,9 @@ func main() {
 		)
 	}
 
+	// Cond : rendez-vous point for goroutines waiting for or announcing the occurence of an event \\
+
+	// Signal
 	a := sync.NewCond(&sync.Mutex{})
 	queue := make([]interface{}, 0, 10)
 
@@ -167,6 +175,7 @@ func main() {
 		a.L.Unlock()
 	}
 
+	// Broadcast
 	type Button struct {
 		Clicked *sync.Cond
 	}
@@ -202,6 +211,7 @@ func main() {
 	button.Clicked.Broadcast()
 	clickRegistered.Wait()
 
+	// Once
 	increment1 := func() {
 		count++
 	}
@@ -256,5 +266,16 @@ func main() {
 	}
 	wg.Wait()
 	fmt.Printf("%d calculators were created.\n", numcCalcsCreated)
+
+	// Channels \\
+
+	// String channel
+	stringStream := make(chan string)
+	go func() {
+		stringStream <- "Hello channels"
+	}()
+	fmt.Println(<-stringStream)
+
+	//
 
 }

@@ -75,7 +75,7 @@ We need to synchronize the main and the SayHello goroutines : "synch.WaitGroup"
     wg.Wait() //this is the join point 
 ```
 
-    - The gorouitne is blocked until the goroutine hosting SayHello() terminates.
+- The gorouitne is blocked until the goroutine hosting SayHello() terminates.
 
 Closures close around the lexical scope they're created in (capturing variables)
 - If we run a closure in a goroutine does the closure operate on a copy of these variables ? or the original reference ?
@@ -86,13 +86,13 @@ Closures close around the lexical scope they're created in (capturing variables)
     wg.Add(1)
     go func(){
         defer wg.Done()
-        salutation = "Welcome"
+        salutation = "Welcome" // the goroutine is modifying the value of the variable salutation
     }()
     wg.Wait()
     fmt.Println(salutation)
 ```
 
-    - Goroutines execute within the same address space they were created in so our program prints "Welcome".
+- Goroutines execute within the same address space they were created in so our program prints "Welcome".
 
 ```go
     var wg synch.WaitGroup
@@ -100,41 +100,49 @@ Closures close around the lexical scope they're created in (capturing variables)
         wd.Add(1)
         go func(){
             defer wg.Done()
-            fmt.Println(salutation)
+            fmt.Println(salutation) // loop variable created by ranging over a string slice
         }()
     }
     wg.Wait()
 ```
 
-    - Before the 22 version Go update the result was :
+- Before the 22 version Go update the result was :
+
     ![alt text](image-1.png)
-        - Each iteration of the loop used the same variable which was updated in each iteration.
-        - This led to unexpected behavior in goroutines : they might all end up referring to the final value of the loop variable.
-    - After the update the result is :
+
+- Each iteration of the loop used the same variable which was updated in each iteration.
+- This led to unexpected behavior in goroutines : they might all end up referring to the final value of the loop variable.
+- After the update the result is :
+
     ![alt text](image-2.png)
-        - Each iteration of a for loop that declares variables uses a new variable for each iteration.
-        - This new behavior applies to "for", "for range" and "if" statement assignment loops.
-        - This change makes the following code behave as most developers would intuitively expect:
+
+- Each iteration of a for loop that declares variables uses a new variable for each iteration.
+- This new behavior applies to "for", "for range" and "if" statement assignment loops.
+- This change makes the following code behave as most developers would intuitively expect:
         
 ```go
-            for _, salutation := range []string{"Hello", "Greetings", "Good day"}{
-                go func(){
-                    fmt.Println(salutation)
-                }()
-            }
+func main(){
+    for _, salutation := range []string{"Hello", "Greetings", "Good day"}{
+        go func(){
+            fmt.Println(salutation)
+        }()
+    }
+}
 ```
 
-            - Now each goroutine captures a different "salutation" value corresponding to the iteration in which it was launched.
-            - While this change makes many concurrent patterns in Go safer and more intuitive it's still considered to explicitly pass loop variables to goroutines
-            - It makes the intent clear and ensures cimpatibility with older Go versions
+- Now each goroutine captures a different "salutation" value corresponding to the iteration in which it was launched.
+- While this change makes many concurrent patterns in Go safer and more intuitive it's still considered to explicitly pass loop variables to goroutines
+- It makes the intent clear and ensures cimpatibility with older Go versions
 
 
 ```go
-                for _, salutation := range []string {"Hello", "Greetings", "Good day"}{
-                    go func(s string){
-                        fmt.Println(s)
-                    }(salutation)
-                }
+func main(){
+    for _, salutation := range []string {"Hello", "Greetings", "Good day"}{
+    go func(s string){
+        fmt.Println(s)
+    }(salutation)
+    }
+}
  ``` 
  
 Because goroutines operate whithin the same address space as each other and just host functions : utilizing them is a natural extension to writing non-concurrent code.
@@ -159,23 +167,23 @@ func main(){
 
     var c <-chan interface{}
     var wg synch.WaitGroup
-    noop := func() {wg.Done(); <-c}
+    noop := func() {wg.Done(); <-c} // 1
 
-    cins numGoroutines = 1e4
+    cins numGoroutines = 1e4 // 2
     wg.Add(numGoroutines)
-    before := memConsumed()
+    before := memConsumed() // 3 
     for i := numGoroutines; i > 0; i --{
         go noop()
     }
     wg.Wait()
-    after := memConsumed()
+    after := memConsumed() // 4
     fmt.Printf("%.3fkb", float64(after-before)/numGoroutines/1000)
 }
 ```
 
-- We require goroutines that'll never exit so we can keep them in memory for measurement.
-- We define the number of goroutines to create (1e4 = 10 000).
-- We measure the amount of memory consumed before and after creating our goroutines.
+- 1 : We require goroutines that'll never exit so we can keep them in memory for measurement.
+- 2 : We define the number of goroutines to create (1e4 = 10 000).
+- 3 : We measure the amount of memory consumed before and after creating our goroutines.
 - The result we get is arround 2.600kb
 
 
@@ -197,27 +205,27 @@ Basic example of using WaitGroup to wait for goroutines to complete :
     func main(){
         var wg sync.WaitGroup 
 
-        wg.Add(1)
+        wg.Add(1) // 1
         go func(){
-            defer wg.Done()
+            defer wg.Done() // 2
             fmt.Println("1st goroutine sleeping...")
             time.Sleep(1)
         }()
 
-        wg.Add(1)
+        wg.Add(1) // 1
         go func() {
-            defer wg.Done()
+            defer wg.Done() // 2
             fmt.Prinln("2cd goroutine sleeping...")
             time.Sleep(2)
         }()
-        wg.wait()
+        wg.wait() // 3
         fmt.Println("All goroutines complete.")
     }
 ```
 
-- We call Add with an argument of 1 to indicate that one goroutine is beginning.
-- We call Done using the defer keyword to ensure that before we exit the goroutine's closure we indicate to the WaitGroup that we've exited.
-- We call Wait which blocks the main goroutine until all goroutines have indicated they have exited. 
+- 1 : We call Add with an argument of 1 to indicate that one goroutine is beginning.
+- 2 : We call Done using the defer keyword to ensure that before we exit the goroutine's closure we indicate to the WaitGroup that we've exited.
+- 3 : We call Wait which blocks the main goroutine until all goroutines have indicated they have exited. 
 - We get this result :
 
 ![alt text](image-3.png)
@@ -274,15 +282,15 @@ Example of 2 goroutines attempting to increment & decrement a common value, they
         var lock sync.Mutex
 
         increment := func(){
-            lock.Lock()
-            defer lock.Unlock()
+            lock.Lock() // 1
+            defer lock.Unlock() // 2
             count ++
             fmt.Printf("Incrementing: %d\n", count)
         }
 
         decrement := func(){
-            lock.Lock()
-            defer lock.Unlock()
+            lock.Lock() // 1
+            defer lock.Unlock() // 2
             count --
             fmt.Printf("Decrementing: %d\n", count)
         }
@@ -317,15 +325,15 @@ we could refactor the for loop :
         var arithmetic sync.WaitGroup
 
         increment := func(){
-            lock.Lock()
-            defer lock.Unlock()
+            lock.Lock() // 1
+            defer lock.Unlock() // 2
             count++
             fmt.Printf("Incrementing: %d\n", count)
         }
 
         decrement := func(){
-            lock.Lock()
-            defer lock.Unlock()
+            lock.Lock() // 1
+            defer lock.Unlock() // 2
             count --
             fmt.Printf("Decrementing: %d\n", count)
         }
@@ -346,8 +354,8 @@ we could refactor the for loop :
         fmt.Println("Arithmetic complete.")
     }
 ```
-- We request exclusive use of the critical section (the count variable) guarded by a Mutex lock : lock.Lock()
-- We indicate that we're done with the critical section lock is guarding : defer lock.Unlock()
+- 1 : We request exclusive use of the critical section (the count variable) guarded by a Mutex lock : lock.Lock()
+- 2 : We indicate that we're done with the critical section lock is guarding : defer lock.Unlock()
     - We always call Unlock whithin the defer statement : ensures that the call always happen even when panicking.
     - Failing to do so would probably cause our program to deadlock.
     - Deadlock : when >= 2 processes are each waiting for the other to release resources or perform actions, causing all of them to remain blocked indefinitly. 
@@ -368,12 +376,12 @@ Example showing that a producer is less active than the numerous consumers the c
     func main(){
         var wg sync.WaitGroup
 
-        producer := func(wg *sync.WaitGroup, l sync.Locker){
+        producer := func(wg *sync.WaitGroup, l sync.Locker){ // 1
             defer wg.Done()
             for i:= 5; i > 0; i --{
                 l.Lock()
                 l.Unlock()
-                time.Sleep(1)
+                time.Sleep(1) // 2
             }
         }
 
@@ -412,8 +420,8 @@ Example showing that a producer is less active than the numerous consumers the c
     }
 ```
 
-- The producer function's 2cd parameter is of the type sync.Locker: has 2 methods (Lock and Unlock) that Mutex & RWMutex satisfy.
-- We make the producer sleep for 1 nanosecond to make it less active than the observers goroutines.
+- 1 : The producer function's 2cd parameter is of the type sync.Locker: has 2 methods (Lock and Unlock) that Mutex & RWMutex satisfy.
+- 2 : We make the producer sleep for 1 nanosecond to make it less active than the observers goroutines.
 - We get this result :
 
 ![alt text](image-6.png)
@@ -452,20 +460,20 @@ whithout the Cond type : one naïve way of doing that is to use an infinite loop
 
 ```go
     func main(){    
-        c := sync.NewCond(&sync.Mutex)
-        c.L.Lock()
+        c := sync.NewCond(&sync.Mutex) // 1
+        c.L.Lock() // 2
         for conditionTrue() == false {
-            c.Wait()
+            c.Wait() // 3
         }
-        c.L.Unlock()
+        c.L.Unlock() // 4
     }
 ```
 
-- We initiate a new Cond that takes in a type that satsfy the sync.Locker interface (Mutex).
+- 1 : We initiate a new Cond that takes in a type that satsfy the sync.Locker interface (Mutex).
     - Allows the Cond type to facilite coordination with other goroutines in a concurrent-safe way.
-- We lock the Locker for this condition : necessary because the call to Wait automatically calls Unlock on the Locker when entered.
-- We wait to be notified that the condition has occured : blocking call (the goroutine'll be suspended).
-- We unlock the Locker for this condition : necessary because when the call to Wait exits it calls Lock on the Locker for the condition.
+- 2 : We lock the Locker for this condition : necessary because the call to Wait automatically calls Unlock on the Locker when entered.
+- 3 : We wait to be notified that the condition has occured : blocking call (the goroutine'll be suspended).
+- 4 : We unlock the Locker for this condition : necessary because when the call to Wait exits it calls Lock on the Locker for the condition.
 
 
 #### Signal
@@ -478,43 +486,43 @@ We have a queue of fixed length 2 & 10 items we want to push onto the queue
 
 ```go
     func main(){
-        a := sync.NewCond(&sync.Mutex{})
-        queue := make([]interface{}, 0, 10)
+        a := sync.NewCond(&sync.Mutex{}) // 1
+        queue := make([]interface{}, 0, 10) // 2
 
         removeFromQueue := func(delay time.Duration) {
             time.Sleep(delay)
-            a.L.Lock()
-            queue = queue[1:]
+            a.L.Lock() // 8
+            queue = queue[1:] // 9
             fmt.Println("Removed from queue")
-            a.L.Unlock()
-            a.Signal()
+            a.L.Unlock() // 10
+            a.Signal() // 11
         }
 
         for i := 0; i < 10; i++ {
-            a.L.Lock()
-            for len(queue) == 2 {
-                a.Wait()
+            a.L.Lock() // 3
+            for len(queue) == 2 { // 4
+                a.Wait() // 5
             }
             fmt.Println("Adding to queue")
             queue = append(queue, struct{}{})
-            go removeFromQueue(1 * time.Second)
-            a.L.Unlock()
+            go removeFromQueue(1 * time.Second) // 6
+            a.L.Unlock() // 7
         }
     }
 ```
 
-- We create our condition using a standard sync.Mutex as the Locker.
-- We create a slice with a length of 0 and initiate it with a capacity of 10.
-- We enter the critical section for the condition by calling Lock on the condition's Locker.
-- We check the length of the queue in a loop : 
+- 1 : We create our condition using a standard sync.Mutex as the Locker.
+- 2 : We create a slice with a length of 0 and initiate it with a capacity of 10.
+- 3 : We enter the critical section for the condition by calling Lock on the condition's Locker.
+- 4 : We check the length of the queue in a loop : 
     - important because a signal on the condition doesn't necessarily mean that what we've been waiting for has occurred only that something's occurred. 
-- We call Wait : will suspend the main goroutine until a signal on the condition's been sent.
-- We create a new goroutine that'll dequeue an element after 1 second.
-- We exit the condition's critical section since we've successfully enqueued an item.
-- We enter the critical section once again for the condition so we can modify data pertninent to the condition.
-- We simulate dequeuing an item by reassigning the head of the slice to the 2cd item.
-- We exit the condition's critical section since we've successfully dequeued an item.
-- We let a goroutine wainting on the condition know that somethinf has occurred. 
+- 5 : We call Wait : will suspend the main goroutine until a signal on the condition's been sent.
+- 6 : We create a new goroutine that'll dequeue an element after 1 second.
+- 7 : We exit the condition's critical section since we've successfully enqueued an item.
+- 8 : We enter the critical section once again for the condition so we can modify data pertninent to the condition.
+- 9 : We simulate dequeuing an item by reassigning the head of the slice to the 2cd item.
+- 10 : We exit the condition's critical section since we've successfully dequeued an item.
+- 11 : We let a goroutine waiting on the condition know that somethinf has occurred. 
 - We get this result :
 
 ![alt text](image-7.png)
@@ -531,57 +539,57 @@ We have a queue of fixed length 2 & 10 items we want to push onto the queue
 
 #### Broadcast 
 
-    Lets imagine we're creating a GUI application with a button on it, we want to register an arbitrary number of functions that'll run when that button is clicked on. Con is perfect for it because we can use its Broadcast method to notify all registered handlers :
+Lets imagine we're creating a GUI application with a button on it, we want to register an arbitrary number of functions that'll run when that button is clicked on. Con is perfect for it because we can use its Broadcast method to notify all registered handlers :
 
-    ```go
-        func main(){
-            type Button struct {
-                Clicked *sync.Cond
-            }
-            button := Button{Clicked: sync.NewCond(&sync.Mutex{})}
-
-            subscribe := func(d *sync.Cond, fn func()){
-                var goroutineRunning sync.WaitGroup
-                goroutineRunning.Add(1)
-                go func(){
-                    goroutineRunning.Done()
-                    d.L.Lock()
-                    defer d.L.Unlock()
-                    d.Wait()
-                    fn()
-                }()
-                goroutineRunning.Wait()
-            }
-
-            var clickRegistered sync.WaitGroup
-            clickRegistered.Add(3)
-            subscribe(button.Clicked, func(){
-                fmt.Println("Maximizing window")
-                clickRegistered.Done()
-            })
-            subscribe(button.Clcked, func(){
-                fmt.Println("Displaying annoying dialog box")
-                clickRegistered.Done()
-            })
-            subscribe(button.Click, func(){
-                fmt.Println("Mouse clicked")
-                clickRegistered.Done()
-            })
-            button.Clicked.Broadcast()
-            clickRegistered.Wait()
+ ```go
+    func main(){
+        type Button struct { // 1
+            Clicked *sync.Cond
         }
-    ```
+        button := Button{Clicked: sync.NewCond(&sync.Mutex{})}
 
-- We define a type Button that contains the Condition Clicked.
-- We define a convenience function that'll allow us to register functions to handle signals from a condition. 
+        subscribe := func(d *sync.Cond, fn func()){ // 2
+             var goroutineRunning sync.WaitGroup
+            goroutineRunning.Add(1)
+            go func(){
+                goroutineRunning.Done()
+                d.L.Lock()
+                defer d.L.Unlock()
+                d.Wait()
+                fn()
+            }()
+            goroutineRunning.Wait()
+        }
+
+        var clickRegistered sync.WaitGroup // 3
+        clickRegistered.Add(3)
+        subscribe(button.Clicked, func(){ // 4
+            fmt.Println("Maximizing window")
+            clickRegistered.Done()
+        })
+        subscribe(button.Clcked, func(){ // 5
+            fmt.Println("Displaying annoying dialog box")
+            clickRegistered.Done()
+        })
+        subscribe(button.Click, func(){ // 6
+            mt.Println("Mouse clicked")
+            lickRegistered.Done()
+        })
+        button.Clicked.Broadcast() // 7
+        clickRegistered.Wait()
+    }
+```
+
+- 1 : We define a type Button that contains the Condition Clicked.
+- 2 : We define a convenience function that'll allow us to register functions to handle signals from a condition. 
     - Each handler is run on its own goroutine.
     - Subscribe'll not exit until that goroutine is confirmed to be running.
-- We set a handler for when the mouse button is raised.
+- 3 : We set a handler for when the mouse button is raised.
     - In turn it calls Broadcast on the Clicked Cond to let all handlers know that the mouse button has been clicked.
-- We create WaitGroup to ensure our program doesn't exit before our writes to Stdout occur.
-- We register a handler that simulates maximizing the button's window when the button is clicked.
-- We register a handler that simulates displaying a dialog box when the mouse is clicked .
-- We simulate a user raising the mouse button from having having clicked the application's button.
+- 4 : We create WaitGroup to ensure our program doesn't exit before our writes to Stdout occur.
+- 5 : We register a handler that simulates maximizing the button's window when the button is clicked.
+- 6 : We register a handler that simulates displaying a dialog box when the mouse is clicked .
+- 7 : We simulate a user raising the mouse button from having having clicked the application's button.
 - We get this result :
 
 ![alt text](image-8.png)
@@ -645,13 +653,13 @@ The ability to call a function exactly once is a strange thing to encapsulate an
         var onceA, onceB syn.Once
         var initB func()
         initA := func(){onceB.Do(initB)}
-        initB := func(){onceA.Do(initA)}
-        inceA.Do(initA)
+        initB := func(){onceA.Do(initA)} //1
+        inceA.Do(initA) // 2
     }
 ```
 
-- The call to initB can't proceed until the onceA.Do(initA) call returns.
-- The program'll deadlock because the call to initB won't proceed until the call to onceA.Do(initA) exits.
+- 1 : The call to initB can't proceed until the onceA.Do(initA) call returns.
+- 2 : The program'll deadlock because the call to initB won't proceed until the call to onceA.Do(initA) exits.
 - This might seem counter-intuitive : we're using sync.Once as intended to guard against multiple initialization
     - But the only thing sync.Once guarantees is that our functions are only called once.
     - Sometimes it's done by deadlocking our program exposing the flaws on our logic.
@@ -790,7 +798,7 @@ Pool is useful for warming a cache of pre-allocated objects for operations that 
         for i := 0; i < b.N; i ++{
             conn, err := net.Dial("tcp", "localhost:8080")
             if err != nil {
-                b.Fatlaf("CAnnot dial host: %v", err)
+                b.Fatlaf("Cannot dial host: %v", err)
             }
             if _, err := io.ReadAll(conn); err != nil {
                 b.Fatalf("Cannot read: %v", err)
@@ -870,4 +878,117 @@ Pool is useful for warming a cache of pre-allocated objects for operations that 
     - Make sure to call Put when we're finished with the object we pulled out of the Pool (otherwise the Pool is useless). It's usually done with Defer.
     - Objects in the Pool must be uniform in makeup.
 
+
+
+## Channels
+
+Channels are 1 of the synchronization primitives in Go derived from Hoare's CSP (Communicating Sequential Processes).
+- CSP : model for describing patterns of interaction in concurrent systems.
+Channels can be used to synchronize access of the memory but their primary use is to communicate informations between goroutines.
+- They are extremely usefull in programs of any size because of their ability to be composed together.
+When using channels we'll pass a value into a chan variable and somewhere else in our program read it off the channel.
+- The disparate parts of our program don't require knowledge of each other only a reference to the same place in memory where the channel resides.
+- This can be done by passing references of channels around our program.
+
+Creating a channel is very simple :
+- We can create a channel with the ":=" operator but we'd need to often declare channels so it's usefull to see the 2 slipt into individual steps :
+
+```go
+    var dataStream chan interface{} // 1
+    dataStream = make(chan interface{}) // 2
+```
+
+- 1 : We declare a channel of type (empty) interface.
+- 2 : We instantiate the channel using the built-in make function
+- This example defines a channel (dataStream) upon which any value can be written or read (we defined an empty interface).
+- Channel can also be declared to only support a unidirectionnal flow of data (only supports sending or receiving informations).
+
+To declare a channel that can only read we place the "<-" on te left -hand side :
+
+```go
+    var dataStream <-chan interface{}
+    dataStream := make(<-chan interface{})
+```
+
+To declare & create a channel that can only send we place the "<-" on the right-hand side :
+
+```go
+    var dataStream chan<- interface{}
+    dataStream := make(chan<- interface{})
+```
+
+- We don't often see unidirectionnal channels instantiated but we often see them used as function parameters and return types.
+    - This is possible because Go'll implicitly convert bidirectional channels to unidirectional ones when needed:
+
+```go
+    var receiveChan <-chan interface{}
+    var sendChan chan<- interface{}
+    dataStream := make(chan interface{})
+
+    // valid statements ...
+    receiveChan = dataStream
+    sendChan = dataStream
+```
+
+- We need to keep in mind that channels are typed.
+- We created a chan interface{} variable : we can place any kind of data onto it.
+- We could also give it a stricter type to constain the type of data it could pass along.
+- Here's an example of a channel for integers :
+
+```go
+    intStream := make(chan int)
+```
+
+- To use channels we use the "<-" operator :
+    - Sending : placing the operator to the right of a channel.
+    - Receiving : placing the oprerator to the left of the channel.
+
+```go
+    stringStream := make(chan string)
+    go func(){
+        stringStream <- "Hello channels" // 1
+    } ()
+    fmt.Println(<-stringStream) // 2
+```
+
+- 1 : We pass a string literal onto the channel stringStream.
+- 2 : We read the string literal off of the channel and print it out Stdout.
+- We get this result :
+
+![alt text](image-14.png)
+
+- All we need is a channel variable and we can pass data onto it or read data off of it.
+    - It's an error to try and write a value onto a read-only channel.
+    - It's also an error to read a value from a write-only channel.
+- If we try to compile the following example, Go'll let us know that we're doing something illegal :
+
+```go
+    writeStream := make(chan<- interface{})
+    readStream := make(<-chan interface{})
+
+    <-writeStream
+    readStream <- struct{}{}
+```
+
+- We get this error message :
+
+![alt text](image-15.png)
+
+Example of a nonsensical conditional to prevent the anonymous goroutine from placing a value on the channel:
+
+```go
+    stringStream := make(chan string)
+    go func(){
+        if 0 != 1 { // 1
+            return
+        }
+        stringStream <- "Hello channel"
+    }()
+    fmt.Println(<-stringStream)
+```
+
+- 1 : We ensure the stringStream never gets a value placed upon it.
+- Panic :
+
+![alt text](image-16.png)
 
