@@ -804,6 +804,15 @@ Pool is useful for warming a cache of pre-allocated objects for operations that 
 
 ![alt text](image-10.png)
 
+- we can also just click on "run benchmark" above the BenchmarckNetworkRequest function :
+
+![alt text](image-11.png)
+
+- we get this result :
+
+![alt text](image-12.png)
+
+- We get like 1e9 ns/op ( more or less 1s/operation): it's the average time taken to complete one iteration of the benchmark (nanosecond/operation)
 - Let's see if we can improve it by using a sync.Pool to host connections to our fictious service :
 
 ```go 
@@ -849,13 +858,16 @@ Pool is useful for warming a cache of pre-allocated objects for operations that 
 
 ![alt text](image-13.png)
 
-- we can also just click on "run benchmark" above the BenchmarckNetworkRequest function :
-
-![alt text](image-11.png)
-
-- we get this result :
-
-![alt text](image-12.png)
-
+- We get like 8.6e5 ns/op so its approximately 1e3 (1000x) times faster than previously.
+    - Utilizing this pattern when working with things that are expensive to create can drastically improve response time.
+- The object pool design pattern is best used either when we have concurrent processes that requires objects (but disposed of them very rapidly after instantiation) or when construction of these objects could negatively impact memory.
+- There is 1 thing to be wary of when determinig whether or not we should utilize a Pool:
+    - If the code that utilizes Pool requires things that are not homogenous we may spend more time converting what we retrieved from the Pool than it would have taken just to instantiate it in the first place.
+    - If our program requires slices of random and viariable length : a Pool isn't going to help us much (the probability of receiving a slice the length we requier is low).
+- When working with Pool we need to keep the following points in mind :
+    - When instantiating sync.Pool give it a New member variable that is thread-safe when called.
+    - When receiving an instance from Get don't make assumptions regarding the state of the object we receive back.
+    - Make sure to call Put when we're finished with the object we pulled out of the Pool (otherwise the Pool is useless). It's usually done with Defer.
+    - Objects in the Pool must be uniform in makeup.
 
 
