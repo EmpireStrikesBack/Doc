@@ -522,8 +522,9 @@ We have a queue of fixed length 2 & 10 items we want to push onto the queue
 - The program successfully add 10 items to the queue and exits before it has a chance to dequeue the last 2 items 
 - It always wait until at least 1 item is dequeued before enqueing another one.
 - Signal : 1 of the 2 methods that Cond provides for notifying goroutines blocked on Wait call that condtion has been triggered (The other one is Broadcast).Internally the runtimes maintains a FIFO list of goroutines waiting to be signaled.
-    - Signal finds the goroutine that's been waiting the longest and notifies that 
-- Broadcast : sends a signal to all goroutines that are waiting 
+    - Signal finds the goroutine that's been waiting the longest and notifies that.
+    - FIFO list : First-in First-out, it's a data struct where the first element added to the list is also the first one to be removed. 
+- Broadcast : sends a signal to all goroutines that are waiting.
     - Broadcast is more interesting as it provides a way to communicate with multiple goroutines at once.
     - We could do the same thing with Signal with channels but Broadcast is way more efficient.
 
@@ -589,3 +590,272 @@ We have a queue of fixed length 2 & 10 items we want to push onto the queue
     - Without the clickRegistered WaitGroup we could call button.Clicked.Broadcast multiple times and each time all 3 handlers would be invoked.
     - This is something channel's can't do easily and one of the main reasons to use Cond type.
 - Like most of the things in the sync Package the usage of Cond works best when constrained to a tight scope or exposed to a broader scope taht encapsulates it.
+
+
+
+### Once
+
+Sync.Once is a type that utilizes sync primitives internally to ensure that only one call to DO ever calls the function passed in, even on different goroutines.
+- We wrap the call to increment in a sync.Once Do method.
+The ability to call a function exactly once is a strange thing to encapsulate and put into the standard package but the need for this pattern comes up rather frequently.
+
+```go
+    func main(){
+        var count int
+        increment := func(){
+            count ++
+        }
+
+        var once sync.Once
+        var increments sync.WaitGroup
+        increments.Add(100)
+        for i := 0; i < 100; i ++{
+            go func(){
+                defer increments.Done()
+                once.Do(increment)
+            }()
+        }
+        increments.Wait()
+        fmt.Printf("Count is %d\n", count)
+    }
+```
+
+- It's tempting to say that the result'll be "Count is 100" but the sync.Once variable wraps the call to increment within the Do method of once.
+- The result'll be "Count is 1".
+
+```go
+    func main(){
+        var count int
+        increment := func(){count++}
+        decrement := func(){count--}
+
+        var once sync.Once
+        once.Do(increment)
+        once.Do(decrement)
+
+        fmt.Printf("Count: %d\n", count)
+    }
+```
+
+- The result is "Count: 1"
+    - sync.Once only counts the number of times Do is called not how many times unique functions passed into Do are called.
+
+```go
+    func main(){
+        var onceA, onceB syn.Once
+        var initB func()
+        initA := func(){onceB.Do(initB)}
+        initB := func(){onceA.Do(initA)}
+        inceA.Do(initA)
+    }
+```
+
+- The call to initB can't proceed until the onceA.Do(initA) call returns.
+- The program'll deadlock because the call to initB won't proceed until the call to onceA.Do(initA) exits.
+- This might seem counter-intuitive : we're using sync.Once as intended to guard against multiple initialization
+    - But the only thing sync.Once guarantees is that our functions are only called once.
+    - Sometimes it's done by deadlocking our program exposing the flaws on our logic.
+
+
+
+### Pool
+
+It's a concurrent-safe implementation of the object pool pattern.
+It's a way to create and make available a fixed number (pool) of things to use.
+It's usually used to constrain the creation of things that are expensive (database connections) so that only a fixed number of them are ever created; but an indeterminate number of operations can still access to thes things.
+- This data type can be safely used by multiple goroutines 
+Pool's primary interface is its Get method :
+- When called Get'll first check whether there are anu available instances within the pool to return to the caller.
+- If not calls its New member variable to create a new one.
+- When finished caller call Put to place the instance they were woking with back in the pool for use by other processes.
+
+```go
+    func main(){
+        myPool := &sync.Pool{ // 1
+            New: func() interface{}{
+                fmt.Println("Creating new instance.")
+                return struct{}{}
+            },
+        }
+
+        myPool.Get() // 2
+        instance := myPool.Get() // 2
+        myPool.Put(instance) // 3
+        myPool.Get() // 4
+    }
+```
+
+- 1 : We create the variable myPool
+- 2 : We call get on the pool : these calls'll invoke the New functio defined on the poo since instances haven't yet been instantiated.
+- 3 : We put an instance previously retrieved back in the pool : it increases the available number of instances to 1.
+- 4 : When this call is executed we'll reuse the instance previously allocated and put it back in the pool.
+    - The New function'll not be invoked.
+- We get this result :
+
+![alt text](image-9.png)
+
+So why use a pool and not just instanttiate objects .
+- Go has a garbage collector so instantiated objects'll be automatically cleaned up.
+
+```go
+    func main(){
+        var numCalcsCreated int
+        calcPool := &sync.Pool {
+            New: func() interface{}{
+                numCalcsCreated += 1
+                mem := make([]byte, 1024)
+                return &mem // 1 
+            },
+        }
+
+        // Seed the pool with 4kb
+        calcPool.Put(calcPool.New())
+        calcPool.Put(calcPool.New())
+        calcPool.Put(calcPool.New())
+        calcPool.Put(calcPool.New())
+
+        const numWorkers = 1024*1024
+        var wg sync.WaitGroup
+        wg.Add(numWorkers)
+        for i := numwWorkers; i > 0; i --{
+            go func() {
+                defer wg.Done()
+                mem := calcPool.Get().(*[]byte) // 2
+                defer calcPool.Put(mem)
+            }()
+        }
+        wg.Wait()
+        fmt.Printf("%d calculators were created", numCalcsCreated)
+    }
+```
+
+- 1 : We're storing the address of the slice of bytes.
+- 2 : We're asserting the type is a pointer to a slice of bytes.
+- We get the result "8 calculators were created."
+    - If we'd have run it whithout a sync.Pool the result'd be non deterministic.
+
+Pool is useful for warming a cache of pre-allocated objects for operations that must run as quickly as possible.
+- Instead of trying to guard the host machine's memory by constaining the jumber of objects created we're trying to guard consumers' time by front-loading the time it takes to get a refence to another object.
+- It's very common when writing network servers that attempt to respond to requests as quickly as possible.
+- Let's create a function that simulates creating a connection to a service in the server.go file (we'll make this connection take a long time) : 
+
+```go 
+    func connectToService() interface{}{
+        time.Sleep(1*time.Second)
+        return struct{}{}
+    }
+
+```
+
+- Next let's how performant a network service would be iffor every request we started a new connection to the service.
+- We'll write a network handler that opens a connection to another sevice for every connection the network handler accepts.
+    - We'll only allow one connection at a time (still in the server.go file) :
+
+```go
+    func startNetworkDaemon() *sync.WaitGroup{
+        var wg.WaitGroup
+        wg.Add(1)
+        go fun() {
+            server, err := net.Listen("tcp"), "localhost: 8080")
+            if err != nil {
+                log.Fatalf("cannot listen: %v", err)
+            }
+            defer server.Close()
+            wg.Done()
+
+            for {
+                conn, err := server.Accept()
+                if err != nil {
+                    log.Printf("Cannot accept connection: %v", err)
+                    continue 
+                }
+                connectToService()
+                fmt.Fprintln(conn, "")
+                conn.Close()
+            }
+        }()
+        return wg
+    }
+```
+
+- Now let's benchmark this (in the server_test.go) :
+
+```go 
+    func init(){
+        daemonStarted := startNetworkDaemon()
+        daemonStarted.Wait()
+    }			ConnectToService()
+
+    func BenchmarkNetworkRequest(b *testing.B){
+        for i := 0; i < b.N; i ++{
+            conn, err := net.Dial("tcp", "localhost:8080")
+            if err != nil {
+                b.Fatlaf("CAnnot dial host: %v", err)
+            }
+            if _, err := io.ReadAll(conn); err != nil {
+                b.Fatalf("Cannot read: %v", err)
+            }
+            conn.Close()
+        }
+    }
+```
+
+- lets enter this command in the terminal (in the server_test.go directory) : go test -benchtime=10s -bench=.
+
+![alt text](image-10.png)
+
+- Let's see if we can improve it by using a sync.Pool to host connections to our fictious service :
+
+```go 
+    func warmServiceConnCache() *sync.Pool {
+        p := &sync.Pool{
+            New: connectToService,
+        }
+        for i:= 0; i < 10; i++{
+            p.Put(p.New())
+        }
+        return p
+    }
+
+    func StartNetworkDaemon() *sync.WaitGroup {
+        var wg sync.WaitGroup
+        wg.Add(1)
+        go func(){
+            connPool := warmServiceConnCache()
+
+            server, ee := net.Listen("tcp", "loclahost:8080")
+            if err != nil {
+                log.Fatalf("Cannot listen: %v", err)
+            }
+            defer server.Close()
+            wg.Done()
+
+            for {
+                conn, err := server.Accept()
+                if err != nil {
+                    log.printf("Cannot accept connection: %v", err)
+                    continue
+                }
+                svcConn := connPool.Get()
+                fmt.Fprintln(conn, "")
+                connPool.Put(svcConn)
+                conn.Close()
+            }
+        }()
+        return &wg
+    }
+```
+- We enter the same command as before : go test -bechtime=10s -bench=.
+
+![alt text](image-13.png)
+
+- we can also just click on "run benchmark" above the BenchmarckNetworkRequest function :
+
+![alt text](image-11.png)
+
+- we get this result :
+
+![alt text](image-12.png)
+
+
+

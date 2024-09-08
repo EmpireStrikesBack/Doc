@@ -201,4 +201,60 @@ func main() {
 	})
 	button.Clicked.Broadcast()
 	clickRegistered.Wait()
+
+	increment1 := func() {
+		count++
+	}
+
+	var once sync.Once
+	var increments sync.WaitGroup
+	increments.Add(100)
+	for i := 0; i < 100; i++ {
+		go func() {
+			defer increments.Done()
+			once.Do(increment1)
+		}()
+	}
+	increments.Wait()
+	fmt.Printf("count is %d\n", count)
+
+	//Pool
+	myPool := &sync.Pool{
+		New: func() interface{} {
+			fmt.Println("Creating new instance.")
+			return struct{}{}
+		},
+	}
+
+	myPool.Get()
+	instance := myPool.Get()
+	myPool.Put(instance)
+	myPool.Get()
+
+	var numcCalcsCreated int
+	calcPool := &sync.Pool{
+		New: func() interface{} {
+			numcCalcsCreated += 1
+			mem := make([]byte, 1024)
+			return &mem
+		},
+	}
+
+	calcPool.Put(calcPool.New())
+	calcPool.Put(calcPool.New())
+	calcPool.Put(calcPool.New())
+	calcPool.Put(calcPool.New())
+
+	const numWorkers = 1024 * 1024
+	wg.Add(numWorkers)
+	for i := numWorkers; i > 0; i-- {
+		go func() {
+			defer wg.Done()
+			mem := calcPool.Get().(*[]byte)
+			defer calcPool.Put(mem)
+		}()
+	}
+	wg.Wait()
+	fmt.Printf("%d calculators were created.\n", numcCalcsCreated)
+
 }
