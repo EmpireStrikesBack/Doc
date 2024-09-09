@@ -14,6 +14,7 @@ import (
 var wg sync.WaitGroup
 
 func main() {
+
 	// Creating a join point
 	for _, salutation := range []string{"hello", "greetings", "good day"} {
 		wg.Add(1)
@@ -335,4 +336,23 @@ func main() {
 	for integer := range intStream2 {
 		fmt.Fprintf(&stdoutBuff, "Received %v.\n", integer)
 	}
+
+	// Goroutine that owns a channel and a consumer that handles blocking & closing of a channel
+	chanOwner := func() <-chan int {
+		resultStream := make(chan int, 5)
+		go func() {
+			defer close(resultStream)
+			for i := 0; i < 6; i++ {
+				resultStream <- i
+			}
+		}()
+		return resultStream
+	}
+
+	resultStream := chanOwner()
+	for result := range resultStream {
+		fmt.Printf("Received: %d\n", result)
+	}
+	fmt.Println("Done receiving !!")
+
 }

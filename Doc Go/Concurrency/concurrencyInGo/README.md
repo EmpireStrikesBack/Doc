@@ -1167,3 +1167,73 @@ Buffered channels can be usefull in ceratin situations but we should create them
 
 
 ### Default channel value (nil)
+
+How do programs interact with a nil channel ?
+Let's try reading from a nil channel :
+
+```go
+    var dataStream chan interface{}
+    <-dataStream
+```
+
+- This give a fatal error with a deadlock : reading from a nil channel'll block a program (not necessarily deadlock it).
+
+![alt text](image-25.png)
+
+Let's try to write to a nil channel :
+
+```go
+    var dataStream chan interface{}
+    dataStream <- struct{}{}
+```
+
+- This gives a fatal error with a deadlock again :
+
+![alt text](image-26.png)
+
+Let's try to close a nil channel :
+
+```go
+    var dataStream chan interface{}
+    close(dataStream)
+```
+
+- This panics : close of nil channel 
+
+![alt text](image-27.png)
+
+- It's the worst outcome of all the operations performed on a nil channel : a panic 
+
+![alt text](image-28.png)
+
+- Lets take a look to help clarify these concepts by creating a goroutine that clearly owns a channel and a consumer that handles blocking and closing of a channel:
+```go
+    chanOwner := func() <-chan int {
+		resultStream := make(chan int, 5) // 1
+		go func() { // 2
+			defer close(resultStream) // 3
+			for i := 0; i < 6; i++ {
+				resultStream <- i
+			}
+		}()
+		return resultStream // 4
+	}
+
+	resultStream := chanOwner()
+	for result := range resultStream { // 5
+		fmt.Printf("Received: %d\n", result)
+	}
+	fmt.Println("Done receiving !!")
+```
+
+- 1 : We instantiate a buffered channel of 5 (we know it'll produce 6 results)
+- 2 : We start an anonymous goroutine that performs writes on resultStream (encapsulated whithin the surrounding function).
+- 3 : We ensure that resultStream is closed once we're finished with it.
+- 4 : We return the channel
+    - The return value is declared as read-only channel : resultStream'll implicitly be converted to read-only for consumers.
+- 5 : We range over resultStream as a consumer we're only concerned with blocking and closing channels.
+- We get this result :
+
+![alt text](image-29.png)
+
+In many ways, channels are the glue that binds goroutines together.
