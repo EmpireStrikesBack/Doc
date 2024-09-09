@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"os"
@@ -276,6 +277,62 @@ func main() {
 	}()
 	fmt.Println(<-stringStream)
 
-	//
+	// receiving with returning 2 values
+	go func() {
+		stringStream <- "Hello my channels"
+	}()
+	salutation, ok := <-stringStream
+	fmt.Printf("(%v): %v\n", ok, salutation)
 
+	// Reading from a closed channel
+	intStream := make(chan int)
+	close(intStream)
+	integer, ok := <-intStream
+	fmt.Printf("(%v): %v\n", ok, integer)
+
+	//Ranging over channels
+	intStream1 := make(chan int)
+	go func() {
+		defer close(intStream1)
+		for i := 1; i <= 5; i++ {
+			intStream1 <- i
+		}
+	}()
+
+	for integer := range intStream1 {
+		fmt.Printf("%v", integer)
+	}
+	fmt.Print("\n")
+
+	// Closing channel is both cheaper and faster than performing n writes
+	begin := make(chan interface{})
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-begin
+			fmt.Printf("%v has begun\n", i)
+		}(i)
+	}
+	fmt.Println("Unblocking goroutines")
+	close(begin)
+	wg.Wait()
+
+	// Another more complete example using buffered channels
+	var stdoutBuff bytes.Buffer
+	defer stdoutBuff.WriteTo(os.Stdout)
+
+	intStream2 := make(chan int, 4)
+	go func() {
+		defer close(intStream2)
+		defer fmt.Fprintln(&stdoutBuff, "Producer done.")
+		for i := 0; i < 5; i++ {
+			fmt.Fprintf(&stdoutBuff, "sending: %d\n", i)
+			intStream2 <- i
+		}
+	}()
+
+	for integer := range intStream2 {
+		fmt.Fprintf(&stdoutBuff, "Received %v.\n", integer)
+	}
 }
