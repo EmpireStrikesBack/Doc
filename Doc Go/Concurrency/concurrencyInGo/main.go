@@ -355,4 +355,74 @@ func main() {
 	}
 	fmt.Println("Done receiving !!")
 
+	// Select statements \\
+
+	// first example
+	start := time.Now()
+	b := make(chan interface{})
+	go func() {
+		time.Sleep(5 * time.Second)
+		close(b)
+	}()
+
+	fmt.Println("Blocking on read...")
+	select {
+	case <-b:
+		fmt.Printf("Unblocked %v later.\n", time.Since(start))
+	}
+
+	// What happens if multiple channels are ready simultaneously
+	c1 := make(chan interface{})
+	close(c1)
+	c2 := make(chan interface{})
+	close(c2)
+
+	var c1Count, c2Count int
+	for i := 1000; i >= 0; i-- {
+		select {
+		case <-c1:
+			c1Count++
+		case <-c2:
+			c2Count++
+		}
+	}
+	fmt.Printf("c1Count: %d\nc2Count: %d\n", c1Count, c2Count)
+
+	// What happens if there are never any channel that become ready
+	var z <-chan int
+	select {
+	case <-z:
+	case <-time.After(1 * time.Second):
+		fmt.Println("Timed out.")
+	}
+
+	// What happens when no channel us ready & we need to do something in the meantime
+	start1 := time.Now()
+	var c3, c4 <-chan int
+	select {
+	case <-c3:
+	case <-c4:
+	default:
+		fmt.Printf("In default after %v\n\n", time.Since(start1))
+	}
+
+	// using the default clause in conjunction with a for-select loop
+	done := make(chan interface{})
+	go func() {
+		time.Sleep(5 * time.Second)
+		close(done)
+	}()
+
+	workCounter := 0
+loop:
+	for {
+		select {
+		case <-done:
+			break loop
+		default:
+			workCounter++
+			time.Sleep(1 * time.Second)
+		}
+	}
+	fmt.Printf("Achieved %v cycle of work before signalled to stop.\n", workCounter)
 }

@@ -1237,3 +1237,164 @@ Let's try to close a nil channel :
 ![alt text](image-29.png)
 
 In many ways, channels are the glue that binds goroutines together.
+
+
+
+## The select statement
+
+The select statement is the glue that binds the channels together : it's how we're able to compose channels together in a program to form larger abstractions.
+Select statements are one of the most crucial things in Go program concerning concurrency.
+We can find select statements binding together channels locally whithin a single function or type, or globally at the intersection of >=2 components in a system.
+In addition to joining components, they can help safely bring channels together with concepts like cancellations, timeouts, waiting & default values.
+
+example :
+
+```go
+    var c1, c2 <-chan interface{}
+    var c3 chan <- interface{}
+    select {
+        case <- c1 :
+            // do something
+        case <- c2:
+            // do something
+        case c3 <- struct {}{}:
+            // do something
+    }
+```
+
+- Just like the switch block the selct block encompasses a series of case statements that guard a series of statements.
+    - Unlike switch case, select statements aren't tested sequentially and execution won't automatically fall through if none of the criteria are met.
+    - Instead all channel reads and writes are considered simultaneously to see if any of them are ready : 
+        - Populated or closed channels (reads).
+        - Channels that are not at capacity (writes).
+    - If none of the channels are ready : the entire select statement blocks.
+    - Then when 1 of the channels is ready that opertion'll proceed and its corresponding statement'll execute.
+
+```go
+   start := time.Now()
+	b := make(chan interface{})
+	go func() {
+		time.Sleep(5 * time.Second)
+		close(b) // 1
+	}()
+
+	fmt.Println("Blocking on read...")
+	select {
+	case <-b: // 2
+		fmt.Printf("Unblocked %v later.\n", time.Since(start))
+	}
+```
+
+- 1 : We close the channel after waiting 5s.
+- 2 : We attempt to read on the channel (we don't really need select here, we could simply write <-b, but we'll expend this code fore next examples).
+- We get this result :
+
+![alt text](image-30.png)
+
+- It's a simple and efficient way to block while we're waiting for something to happen :
+    - What happens when multiple channels have something to read ?
+    - What if there are never any channels that become ready ?
+    - What if we want to do something but no channels are currently ready ?
+
+
+### What happens when multiple channels are ready simultaneously ?
+
+```go
+    c1 := make(chan interface{})
+	close(c1)
+	c2 := make(chan interface{})
+	close(c2)
+
+	var c1Count, c2Count int
+	for i := 1000; i >= 0; i-- {
+		select {
+		case <-c1:
+			c1Count++
+		case <-c2:
+			c2Count++
+		}
+	}
+	fmt.Printf("c1Count: %d\nc2Count: %d\n", c1Count, c2Count)
+```
+
+- We get this result :
+
+![alt text](image-31.png)
+
+- In 1000 iterations : half the time the select statement read form c1 and the other half from c2.
+- The Go runtime'll perform a pseudo-random uniform iteration over the set of case statements, meaning that of our set of case statements each has an equal chance of being selected as all the other. 
+    - The Go runtime can't know anything about the intent of our select statement : the best thing it can do is work well in the average case.
+    - A good way to do that is to introduce a random variable into our equation (which channel to select from).
+    - By weighting the chance of each channel being utilized equally, all Go programs that utilize the select statement'll perform well in the average case.
+
+
+### What happens if there are never any channel that become ready ?
+
+```go
+    var z <-chan int
+	select {
+	case <-z: // 1
+	case <-time.After(1 * time.Second):
+		fmt.Println("Timed out.")
+	}
+```
+
+- 1 : This case statement'll enver become unblocked because we'reading from a nil channel.
+- We get this reesult :
+
+![alt text](image-32.png)
+
+- The time.After function takes in time.Duration and returns a channel taht'll send the current time after the duration we provide it with.
+    - It's a concise way to time out in select statements.
+
+
+
+### What happens when no channel is ready & we need to do something in the meantime ?
+
+```go
+    start1 := time.Now()
+	var c3, c4 <-chan int
+	select {
+	case <-c3:
+	case <-c4:
+	default:
+		fmt.Printf("In default after %v\n\n", time.Since(start1))
+	}
+```
+
+- We get this result :
+
+![alt text](image-33.png)
+
+- It ran the default statement almost instantaneously : allows to exit a select block whithout blocking.
+- Usually we'd see a default clause used in conjunction with a for-select loop : allows the goroutine to make progress on work while waiting for another goroutine to report a result.
+
+```go
+    done := make(chan interface{})
+	go func() {
+		time.Sleep(5 * time.Second)
+		close(done)
+	}()
+
+	workCounter := 0
+loop:
+	for {
+		select {
+		case <-done:
+			break loop
+		default:
+			workCounter++
+			time.Sleep(1 * time.Second)
+		}
+	}
+	fmt.Printf("Achieved %v cycle of work before signalled to stop.\n", workCounter)
+```
+
+- We get this result :
+
+![alt text](image-34.png)
+
+- In this case we have a loop that's doing some kind of work and occasionally checking whether it should stop.
+- There's a special case for empty select statements (with no case clauses) : {}
+    - This statement'll simply block forever.
+
